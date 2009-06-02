@@ -1,0 +1,24 @@
+---
+name: DBIx-Class-FormFuBuilder
+version: 0.00
+author:
+  - 'Wolfgang Kinkeldei <wki@cpan.org>'
+abstract: generate HTML::FormFu forms from a resultset
+license: perl
+resources:
+  license: http://dev.perl.org/licenses/
+requires:
+  Catalyst::Runtime: 5.80
+  Test::Builder: 0.86
+  Test::Builder::Tester: 1.18
+  Test::Harness: 3.14
+  Test::More: 0.86
+  perl: 5.8.8
+provides:
+  DBIx::Class::FormFuBuilder:
+    file: lib/DBIx/Class/FormFuBuilder.pm
+    version: 0.00
+generated_by: Module::Build version 0.33
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
