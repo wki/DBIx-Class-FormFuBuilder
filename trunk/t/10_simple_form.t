@@ -60,10 +60,51 @@ DBIx::Class->load_components('FormFuBuilder');
 # build a resultset
 my $schema = Schema->clone();
 
-my $resultset = $schema->resultset('Person');
+my $resultset = $schema->resultset('Schema::Result::Person');
 
 my $form;
-lives_ok { my $form = $resultset->generate_form_fu() } 'form construction OK';
+lives_ok { $form = $resultset->generate_form_fu() } 'form construction OK';
 
-use Data::Dumper;
-print STDERR Data::Dumper->Dump([$form], ['form']);
+is_deeply($form,
+          {
+              elements => [{
+                              'name' => 'id',
+                              'type' => 'Hidden'
+                            },
+                            {
+                              'constraints' => [
+                                                 {
+                                                   'type' => 'Required'
+                                                 }
+                                               ],
+                              'name' => 'name',
+                              'filters' => [],
+                              'type' => 'Text',
+                              'label' => 'Name'
+                            },
+                            {
+                              'constraints' => [
+                                                 {
+                                                   'type' => 'Required'
+                                                 }
+                                               ],
+                              'name' => 'login',
+                              'filters' => [],
+                              'type' => 'Text',
+                              'label' => 'Login'
+                            },
+                            {
+                              'constraints' => [
+                                                 {
+                                                   'type' => 'Required'
+                                                 }
+                                               ],
+                              'name' => 'active',
+                              'filters' => [],
+                              'type' => 'Text',
+                              'label' => 'Active'
+                            }],
+                attributes => {},
+          }, 'form structure OK');
+# use Data::Dumper;
+# print STDERR Data::Dumper->Dump([$form], ['form']);
