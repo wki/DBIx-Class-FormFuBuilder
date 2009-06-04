@@ -84,12 +84,26 @@ sub form_fu_form_default {
     my $self = shift;
     
     my $form_default = ($info{form} ||= {});
-    if (@_) {
-        die "args must be hashref" if (ref($_[0]) ne 'HASH');
-        _merge_into_hash($form_default,
-                         ref($_[0]) eq 'HASH' ? %{$_[0]} : @_);
-    }
+    _merge_into_hash($form_default, @_) if (@_);
     return $form_default;
+}
+
+=head2 form_fu_type_default
+
+specify defaults for a given SQL-Datatype
+
+=cut
+
+sub form_fu_type_default {
+    my $self = shift;
+    my $datatype = shift;
+    
+    die "datatype must be a string"
+        if (ref($datatype) || !$datatype);
+    
+    my $type_default = ($info{type}->{$datatype} ||= {});
+    _merge_into_hash($type_default, @_) if (@_);
+    return $type_default;
 }
 
 =head2 form_fu_extras
@@ -120,10 +134,7 @@ sub form_fu_extra {
     
     my $form_fu_extra = 
         ($self->column_info($column_name)->{extras}->{formfu} ||= {});
-    if (@_) {
-        _merge_into_hash($form_fu_extra, 
-                         ref($_[0]) eq 'HASH' ? %{$_[0]} : @_ );
-    }
+    _merge_into_hash($form_fu_extra, @_) if (@_);
     return $form_fu_extra;
 }
 
@@ -169,7 +180,6 @@ sub generate_form_fu {
         unless $rs->isa('DBIx::Class::ResultSet');
         
     my $result_source = $rs->result_source;
-    my $cols = join(', ', $result_source->columns);
     
     ### FIXME: is there a way to avoid this bad back???
     ### fire this query would be a solution but takes time :-(
@@ -181,24 +191,10 @@ sub generate_form_fu {
     my $append = delete $args{append};
     $args{elements} = [] if (ref($args{elements}) ne 'ARRAY');
     
-    # foreach my $s qw(constraint filter) {
-    #     my $p = "${s}s";
-    #     $args{$p} = [
-    #         ($args{$s} 
-    #          ? ref($args{$s}) eq 'ARRAY' ? @{$args{$s}} : $args{$s}
-    #          : ()),
-    #         ($args{$p} 
-    #          ? ref($args{$p}) eq 'ARRAY' ? @{$args{$p}} : $args{$p}
-    #          : ()),
-    #     ];
-    #     delete $args{$s};
-    # }
     my %form = (
         attributes => {},
         %args,
     );
-    
-    # warn "form: " . Data::Dumper->Dump([\%form], ['form']);
     
     #
     # add elements
@@ -230,11 +226,38 @@ sub generate_form_fu {
 #
 sub _merge_into_hash {
     my $hash = shift;
-    my %args = @_;
+    
+    return if (!scalar(@_) || !$_[0]);
+    
+    my %args = ref($_[0]) eq 'HASH' ? %{$_[0]} : (@_);
 
     # special treatment for constraint & filter
     foreach my $s qw(constraint filter) {
+        # $p = plural, $s = singular...
         my $p = "${s}s";
+        
+        # remove unwanted things
+        if (exists($hash->{$p}) &&
+            (exists($args{"-$s"}) || exists($args{"-$p"})) ) {
+            # build remove-list
+            my %to_remove = (
+                map { ((ref($_) eq 'HASH' ? $_->{type} : $_) => 1) }
+                ($args{"-$s"}
+                 ? ref($args{"-$s"}) eq 'ARRAY' ? @{$args{"-$s"}} : $args{"-$s"}
+                 : ()),
+                ($args{"-$p"}
+                 ? ref($args{"-$p"}) eq 'ARRAY' ? @{$args{"-$p"}} : $args{"-$p"}
+                 : ()),
+            );
+            warn "about to remove: " . join('/', keys(%to_remove));
+            # use Data::Dumper; print STDERR Data::Dumper->Dump([\%to_remove],['remove']);
+            $hash->{$p} = [
+                grep { !exists($to_remove{$_->{type}}) }
+                @{$hash->{$p}}
+            ];
+        }
+        
+        # add remaining things if needed
         next if (!exists($args{$s}) && !exists($args{$p}));
         
         my %seen = map { ($_->{type} => 1) }
@@ -251,12 +274,13 @@ sub _merge_into_hash {
              ? ref($args{$p}) eq 'ARRAY' ? @{$args{$p}} : $args{$p}
              : ()),
         );
-        delete @args{$s, $p};
+        delete $args{$s};
+        delete $args{$p};
     }
     
     # transfer remaining things
     $hash->{$_} = $args{$_}
-        for keys(%args);
+        for grep {1 || !m{\A-}xms} keys(%args);
 }
 
 #
@@ -327,31 +351,19 @@ sub _add_elements {
         next if ($is_primary{$column});
         
         # get the column's info
-        my $info = $result_source->column_info($column);
+        my $column_info = $result_source->column_info($column);
         
         # OK we got a field left to generate
         my %field = (
             name        => $column,
             label       => ucfirst($column),
-            type        => 'Text',
+            # will be added later
+            # type      => 'Text',
             constraints => [],
             filters     => [],
-            
-            # %{$info->{extras}->{formfu} || {}},
         );
-        if (exists($info->{extras}->{formfu})) {
-            # poor man's deep copy...
-            foreach my $key (keys %{$info->{extras}->{formfu}}) {
-                my $value = $info->{extras}->{formfu}->{$key};
-                if (!ref($value)) {
-                    $field{$key} = $value;
-                } elsif (ref($value) eq 'HASH') {
-                    $field{$key} = { %{$value} };
-                } elsif (ref($value) eq 'ARRAY') {
-                    $field{$key} = [ @{$value} ];
-                }
-            }
-        }
+        
+        _merge_into_hash(\%field, $column_info->{extras}->{formfu});
         
         if (exists($has_one{$column})) {
             #
@@ -360,7 +372,7 @@ sub _add_elements {
             my $source = $has_one{$column}->{source};
             
             $field{type} = 'Select';
-            if ($info->{is_nullable}) {
+            if ($column_info->{is_nullable}) {
                 $field{empty_first} = 1;
                 $field{empty_first_label} = '- none -';
             }
@@ -382,19 +394,30 @@ sub _add_elements {
                     order_by => $label_column,
                 },
             };
-            #delete $field{constraints};
-            #delete $field{filters};
         } else {
             #
             # simple field
             #
-            if (!$info->{is_nullable}) {
+            if (!$column_info->{is_nullable}) {
                 push @{$field{constraints}}, {type => 'Required'};
             }
-            if ($info->{data_type} eq 'numeric') {
+            if ($column_info->{data_type} eq 'numeric') {
                 push @{$field{constraints}}, {type => 'Number'};
             }
+            
+            _merge_into_hash(\%field, $info{type}->{$column_info->{data_type}});
         }
+        
+        #
+        # add a default type if not yet set
+        #
+        $field{type} ||= 'Text';
+        
+        #
+        # cleanup a '-' prefixed keys -- dirty, I know...
+        #
+        delete $field{$_}
+            for grep {m{\A-}} keys(%field);
         
         push @{$elements}, \%field;
     }
@@ -438,21 +461,6 @@ sub _add_elements {
         };
     }
 
-}
-
-#
-# helper: set a filter or a constraint
-#
-sub _set_thing {
-    my $field = shift;
-    my $thing = shift; # 'contraint(s)' or 'filter(s)'
-    my $info  = shift;
-    
-    $thing .= 's' if (exists($field->{"${thing}s"}));
-    return if (!exists($field->{$thing}));
-
-    ### TODO: clever handle singular/plural things
-    ### TODO: clever fill-in things without generating duplicates
 }
 
 =head1 AUTHOR

@@ -63,48 +63,151 @@ my $schema = Schema->clone();
 my $resultset = $schema->resultset('Schema::Result::Person');
 
 my $form;
-lives_ok { $form = $resultset->generate_form_fu() } 'form construction OK';
+lives_ok { $form = $resultset->generate_form_fu() } 
+         'form construction 1 OK';
 
 is_deeply($form,
-          {
-              elements => [{
-                              'name' => 'id',
-                              'type' => 'Hidden'
-                            },
-                            {
-                              'constraints' => [
-                                                 {
-                                                   'type' => 'Required'
-                                                 }
-                                               ],
-                              'name' => 'name',
-                              'filters' => [],
-                              'type' => 'Text',
-                              'label' => 'Name'
-                            },
-                            {
-                              'constraints' => [
-                                                 {
-                                                   'type' => 'Required'
-                                                 }
-                                               ],
-                              'name' => 'login',
-                              'filters' => [],
-                              'type' => 'Text',
-                              'label' => 'Login'
-                            },
-                            {
-                              'constraints' => [
-                                                 {
-                                                   'type' => 'Required'
-                                                 }
-                                               ],
-                              'name' => 'active',
-                              'filters' => [],
-                              'type' => 'Text',
-                              'label' => 'Active'
-                            }],
-                attributes => {},
-          }, 'form structure OK');
-# use Data::Dumper;
-# print STDERR Data::Dumper->Dump([$form], ['form']);
+          { elements => [{
+                           name => 'id',
+                           type => 'Hidden'
+                         },
+                         { 
+                           constraints => [ { type => 'Required' } ],
+                           name => 'name',
+                           filters => [],
+                           type => 'Text',
+                           label => 'Name'
+                         },
+                         { 
+                           constraints => [ { type => 'Required' } ],
+                           name => 'login',
+                           filters => [],
+                           type => 'Text',
+                           label => 'Login'
+                         },
+                         { 
+                           constraints => [ { type => 'Required' } ],
+                           name => 'active',
+                           filters => [],
+                           type => 'Text',
+                           label => 'Active'
+                         }],
+            attributes => {},
+          }, 'form structure 1 OK');
+
+# add an indicator
+lives_ok { $form = $resultset->generate_form_fu({indicator => 'Save'}) } 
+         'form construction 2 OK';
+
+is_deeply($form,
+          { indicator => 'Save',
+            elements => [{
+                           name => 'id',
+                           type => 'Hidden'
+                         },
+                         { 
+                           constraints => [ { type => 'Required' } ],
+                           name => 'name',
+                           filters => [],
+                           type => 'Text',
+                           label => 'Name'
+                         },
+                         { 
+                           constraints => [ { type => 'Required' } ],
+                           name => 'login',
+                           filters => [],
+                           type => 'Text',
+                           label => 'Login'
+                         },
+                         { 
+                           constraints => [ { type => 'Required' } ],
+                           name => 'active',
+                           filters => [],
+                           type => 'Text',
+                           label => 'Active'
+                         },
+                         {
+                           type => 'Submit',
+                           name => 'Save',
+                           value => 'Save',
+                           label => ' ',
+                         }],
+            attributes => {},
+          }, 'form structure 2 OK');
+
+# set some field-specific defaults
+Schema::Result::Person->form_fu_extra(name => {
+    label => 'The Name',
+    filter => 'TrimEdges',
+});
+lives_ok { $form = $resultset->generate_form_fu() } 
+         'form construction 3 OK';
+
+is_deeply($form,
+          { elements => [{
+                           name => 'id',
+                           type => 'Hidden'
+                         },
+                         { 
+                           constraints => [ { type => 'Required' } ],
+                           name => 'name',
+                           filters => [ { type => 'TrimEdges'} ],
+                           type => 'Text',
+                           label => 'The Name'
+                         },
+                         { 
+                           constraints => [ { type => 'Required' } ],
+                           name => 'login',
+                           filters => [],
+                           type => 'Text',
+                           label => 'Login'
+                         },
+                         { 
+                           constraints => [ { type => 'Required' } ],
+                           name => 'active',
+                           filters => [],
+                           type => 'Text',
+                           label => 'Active'
+                         }],
+            attributes => {},
+          }, 'form structure 3 OK');
+
+# add a type modifier
+Schema::Result::Person->form_fu_type_default(boolean => {
+    type => 'Checkbox',
+    value => 1,
+    -constraint => 'Required',
+});
+
+lives_ok { $form = $resultset->generate_form_fu() } 
+         'form construction 4 OK';
+
+is_deeply($form,
+          { elements => [{
+                           name => 'id',
+                           type => 'Hidden'
+                         },
+                         { 
+                           constraints => [ { type => 'Required' } ],
+                           name => 'name',
+                           filters => [ { type => 'TrimEdges'} ],
+                           type => 'Text',
+                           label => 'The Name'
+                         },
+                         { 
+                           constraints => [ { type => 'Required' } ],
+                           name => 'login',
+                           filters => [],
+                           type => 'Text',
+                           label => 'Login'
+                         },
+                         { 
+                           constraints => [],
+                           name => 'active',
+                           filters => [],
+                           type => 'Checkbox',
+                           value => 1,
+                           label => 'Active'
+                         }],
+            attributes => {},
+          }, 'form structure 4 OK');

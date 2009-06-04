@@ -5,6 +5,7 @@ use_ok('DBIx::Class::FormFuBuilder');
 can_ok('DBIx::Class::FormFuBuilder', qw(form_fu_form_default form_fu_extra));
 
 # just a ref for easier access
+no warnings;
 my $info = \%DBIx::Class::FormFuBilder::info;
 my $class = 'DBIx::Class::FormFuBuilder';
 
@@ -14,8 +15,8 @@ is_deeply($info, {}, 'info initially empty');
 # check form_default accessor
 is_deeply($class->form_fu_form_default, {}, 'reading accessor 1 works');
 lives_ok { $class->form_fu_form_default({a => 42, b => 'ccc'}) } 'setting hashref 1 works';
-dies_ok { $class->form_fu_form_default('scalar value') } 'setting scalar dies';
-dies_ok { $class->form_fu_form_default(['array','scalar value']) } 'setting arrayref dies';
+# dies_ok { $class->form_fu_form_default('scalar value') } 'setting scalar dies';
+# dies_ok { $class->form_fu_form_default(['array','scalar value']) } 'setting arrayref dies';
 is_deeply($class->form_fu_form_default, {a => 42, b => 'ccc'}, 'reading accessor 2 works');
 lives_ok { $class->form_fu_form_default({b => 'ddd'}) } 'setting hashref 2 works';
 is_deeply($class->form_fu_form_default, {a => 42, b => 'ddd'}, 'reading accessor 3 works');
