@@ -4,8 +4,6 @@ use Test::Exception;
 use_ok('DBIx::Class::FormFuBuilder');
 can_ok('DBIx::Class::FormFuBuilder', qw(form_fu_form_default form_fu_extra));
 
-exit;
-
 # just a ref for easier access
 no warnings;
 my $info = \%DBIx::Class::FormFuBilder::info;
@@ -72,37 +70,43 @@ $resultset->column_info('col2')->{extras} = {formfu => {}};
 $resultset->form_fu_extra(col2 => {constraint => 'Required'});
 
 is_deeply($resultset->form_fu_extra('col2'), 
-          {constraints => [{type => 'Required'}]}, 
+          # {constraints => [{type => 'Required'}]}, 
+          {constraints => { Required => {type => 'Required'}}}, 
           'setting a scalar constraint works');
 
 $resultset->column_info('col2')->{extras} = {formfu => {}};
 $resultset->form_fu_extra(col2 => {constraints => 'Number'});
 is_deeply($resultset->form_fu_extra('col2'), 
-          {constraints => [{type => 'Number'}]}, 
+          # {constraints => [{type => 'Number'}]}, 
+          {constraints => { Number => {type => 'Number'}}}, 
           'setting a scalar constraints entry works');
           
 $resultset->column_info('col2')->{extras} = {formfu => {}};
 $resultset->form_fu_extra(col2 => {constraint => {type => 'Text'}});
 is_deeply($resultset->form_fu_extra('col2'), 
-          {constraints => [{type => 'Text'}]}, 
+          # {constraints => [{type => 'Text'}]}, 
+          {constraints => { Text => {type => 'Text'}}}, 
           'setting a hashref onstraint entry works');
           
 $resultset->column_info('col2')->{extras} = {formfu => {}};
 $resultset->form_fu_extra(col2 => {constraints => {type => 'Blank'}});
 is_deeply($resultset->form_fu_extra('col2'), 
-          {constraints => [{type => 'Blank'}]}, 
+          # {constraints => [{type => 'Blank'}]}, 
+          {constraints => { Blank => {type => 'Blank'}}}, 
           'setting a hashref constraints entry works');
           
 $resultset->column_info('col2')->{extras} = {formfu => {}};
 $resultset->form_fu_extra(col2 => {constraint => ['Number']});
 is_deeply($resultset->form_fu_extra('col2'), 
-          {constraints => [{type => 'Number'}]}, 
+          # {constraints => [{type => 'Number'}]}, 
+          {constraints => { Number => {type => 'Number'}}}, 
           'setting a arrayref constraint entry works');
 
 $resultset->column_info('col2')->{extras} = {formfu => {}};
 $resultset->form_fu_extra(col2 => {constraints => ['Xxx']});
 is_deeply($resultset->form_fu_extra('col2'), 
-          {constraints => [{type => 'Xxx'}]}, 
+          # {constraints => [{type => 'Xxx'}]}, 
+          {constraints => { Xxx => {type => 'Xxx'}}}, 
           'setting a arrayref constraints entry works');
 
 $resultset->column_info('col2')->{extras} = {formfu => {}};
@@ -111,7 +115,10 @@ $resultset->form_fu_extra(col2 => {
                             constraints => ['Required', {type => 'Regex'}],
                           });
 is_deeply($resultset->form_fu_extra('col2'), 
-          {constraints => [{type => 'Number'}, {type => 'Regex'}, {type => 'Required'}]}, 
+          # {constraints => [{type => 'Number'}, {type => 'Regex'}, {type => 'Required'}]}, 
+          {constraints => {Number => {type => 'Number'}, 
+                           Regex => {type => 'Regex'}, 
+                           Required => {type => 'Required'}}}, 
           'setting a mixed constraint/s entry works');
 
 # and so on... more cases...

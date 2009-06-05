@@ -54,8 +54,6 @@ use_ok('DBIx::Class');
     Schema->register_class(Person => 'Schema::Result::Person');
 }
 
-exit;
-
 # bring FormBuilder into our game
 DBIx::Class->load_components('FormFuBuilder');
 
@@ -183,6 +181,8 @@ Schema::Result::Person->form_fu_type_default(boolean => {
 
 lives_ok { $form = $resultset->generate_form_fu() } 
          'form construction 4 OK';
+
+use Data::Dumper; warn Data::Dumper->Dump([$form],['form']); exit;
 
 is_deeply($form,
           { elements => [{

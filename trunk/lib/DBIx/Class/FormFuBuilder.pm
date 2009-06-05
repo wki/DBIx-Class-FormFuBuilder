@@ -89,6 +89,7 @@ sub form_fu_type_default {
         if (ref($datatype) || !$datatype);
     
     my $type_default = ($info{type}->{$datatype} ||= {});
+    ### FIXME: must keep -constraint(s) and -filter(s)
     _merge_into_hash($type_default, @_) if (@_);
     return $type_default;
 }
@@ -121,6 +122,7 @@ sub form_fu_extra {
     
     my $form_fu_extra = 
         ($self->column_info($column_name)->{extras}->{formfu} ||= {});
+    ### FIXME: must keep -constraint(s) and -filter(s)
     _merge_into_hash($form_fu_extra, @_) if (@_);
     return $form_fu_extra
 }
@@ -231,7 +233,8 @@ sub _merge_into_hash {
             # OK, we have something to remove...
             
             delete $hash->{$p}->{$_}
-                for ( map { ref($_) eq 'HASH' ? $_->{type} : $_ } # get type
+                for ( grep { warn "Remove: $_"; 1 }
+                      map { ref($_) eq 'HASH' ? $_->{type} : $_ } # get type
                       map { ref($_) eq 'ARRAY' ? @{$_} : $_ }     # un-array-ify
                       grep { $_ }                                 # no undef's
                       ($args{"-$s"}, $args{"-$p"}) );
@@ -240,18 +243,27 @@ sub _merge_into_hash {
         # add more things
         if (exists($args{$s}) || exists($args{$p})) {
             $hash->{$p}->{$_->{type}} = $_
-                for ( grep { warn $_->{type}; 1 }
+                for ( # grep { warn "Add: $_->{type}"; 1 }
                       map { ref($_) eq 'HASH' ? $_ : {type => $_} } # get type
                       map { ref($_) eq 'ARRAY' ? @{$_} : $_ }       # un-array-ify
                       grep { $_ }                                   # no undef's
                       ($args{$s}, $args{$p}) );
         }
+        
+        delete $args{"-$s"};
+        delete $args{"-$p"};
+        delete $args{$s};
+        delete $args{$p};
     }
     
-    # add all other remaining things in
-    while (my ($key, $value) = each(%args)) {
-        next if ($key =~ m{\A -? (?:constraint|filter) s? \z}xms);
-        
+    __merge($hash, \%args);
+}
+
+sub __merge {
+    my $hash = shift;
+    my $args = shift;
+    
+    while (my ($key, $value) = each(%{$args})) {
         if (ref($value) eq 'HASH' && exists($hash->{$key}) && ref($hash->{$key}) eq 'HASH') {
             # merge hash into hash
             $hash->{$key}->{$_} = $value->{$_}
@@ -268,7 +280,7 @@ sub _merge_into_hash {
 #
 sub _convert_hash {
     my $hash = shift;
-    
+
     return {
         map {
             m{\A (?:constraints|filters) \z}xms
@@ -278,68 +290,6 @@ sub _convert_hash {
         }
         keys(%{$hash})
     };
-}
-
-#
-# old version - trash soon
-#
-sub _merge_into_hash_OLD {
-    my $hash = shift;
-    
-    return if (!scalar(@_) || !$_[0]);
-    
-    my %args = ref($_[0]) eq 'HASH' ? %{$_[0]} : (@_);
-
-    # special treatment for constraint & filter
-    foreach my $s qw(constraint filter) {
-        # $p = plural, $s = singular...
-        my $p = "${s}s";
-        
-        # remove unwanted things
-        if (exists($hash->{$p}) &&
-            (exists($args{"-$s"}) || exists($args{"-$p"})) ) {
-            # build remove-list
-            my %to_remove = (
-                map { ((ref($_) eq 'HASH' ? $_->{type} : $_) => 1) }
-                ($args{"-$s"}
-                 ? ref($args{"-$s"}) eq 'ARRAY' ? @{$args{"-$s"}} : $args{"-$s"}
-                 : ()),
-                ($args{"-$p"}
-                 ? ref($args{"-$p"}) eq 'ARRAY' ? @{$args{"-$p"}} : $args{"-$p"}
-                 : ()),
-            );
-            warn "about to remove: " . join('/', keys(%to_remove));
-            # use Data::Dumper; print STDERR Data::Dumper->Dump([\%to_remove],['remove']);
-            $hash->{$p} = [
-                grep { !exists($to_remove{$_->{type}}) }
-                @{$hash->{$p}}
-            ];
-        }
-        
-        # add remaining things if needed
-        next if (!exists($args{$s}) && !exists($args{$p}));
-        
-        my %seen = map { ($_->{type} => 1) }
-                   @{$hash->{$p} || []};
-        push @{$hash->{$p}}, (
-            grep { ref($_) eq 'HASH' &&
-                   exists($_->{type}) &&
-                   !$seen{$_->{type}}++ }
-            map { ref($_) ? $_ : {type => $_} }
-            ($args{$s}
-             ? ref($args{$s}) eq 'ARRAY' ? @{$args{$s}} : $args{$s}
-             : ()),
-            ($args{$p}
-             ? ref($args{$p}) eq 'ARRAY' ? @{$args{$p}} : $args{$p}
-             : ()),
-        );
-        delete $args{$s};
-        delete $args{$p};
-    }
-    
-    # transfer remaining things
-    $hash->{$_} = $args{$_}
-        for grep {1 || !m{\A-}xms} keys(%args);
 }
 
 #
@@ -422,7 +372,7 @@ sub _add_elements {
             filters     => {},
         );
         
-        _merge_into_hash(\%field, $column_info->{extras}->{formfu});
+        __merge(\%field, $column_info->{extras}->{formfu});
         
         if (exists($has_one{$column})) {
             #
@@ -464,7 +414,7 @@ sub _add_elements {
                 $field{constraints}->{Number} = {type => 'Number'};
             }
             
-            _merge_into_hash(\%field, $info{type}->{$column_info->{data_type}});
+            __merge(\%field, $info{type}->{$column_info->{data_type}});
         }
         
         #
