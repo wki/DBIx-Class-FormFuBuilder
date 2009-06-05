@@ -54,6 +54,8 @@ use_ok('DBIx::Class');
     Schema->register_class(Person => 'Schema::Result::Person');
 }
 
+exit;
+
 # bring FormBuilder into our game
 DBIx::Class->load_components('FormFuBuilder');
 

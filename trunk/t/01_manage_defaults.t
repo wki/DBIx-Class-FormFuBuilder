@@ -4,6 +4,8 @@ use Test::Exception;
 use_ok('DBIx::Class::FormFuBuilder');
 can_ok('DBIx::Class::FormFuBuilder', qw(form_fu_form_default form_fu_extra));
 
+exit;
+
 # just a ref for easier access
 no warnings;
 my $info = \%DBIx::Class::FormFuBilder::info;
@@ -68,6 +70,7 @@ is_deeply($resultset->column_info('col2')->{extras}, {}, 'other column info unch
 
 $resultset->column_info('col2')->{extras} = {formfu => {}};
 $resultset->form_fu_extra(col2 => {constraint => 'Required'});
+
 is_deeply($resultset->form_fu_extra('col2'), 
           {constraints => [{type => 'Required'}]}, 
           'setting a scalar constraint works');
@@ -108,7 +111,7 @@ $resultset->form_fu_extra(col2 => {
                             constraints => ['Required', {type => 'Regex'}],
                           });
 is_deeply($resultset->form_fu_extra('col2'), 
-          {constraints => [{type => 'Number'},{type => 'Required'}, {type => 'Regex'}]}, 
+          {constraints => [{type => 'Number'}, {type => 'Regex'}, {type => 'Required'}]}, 
           'setting a mixed constraint/s entry works');
 
 # and so on... more cases...

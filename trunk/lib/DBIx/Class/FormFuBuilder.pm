@@ -1,4 +1,6 @@
 package DBIx::Class::FormFuBuilder;
+use strict;
+use warnings;
 
 our $VERSION = '0.01';
 
@@ -22,26 +24,13 @@ DBIx::Class::FormFuBuilder
     DBIx::Class->load_components('FormFuBuilder');
     
     
-    ### TODO: implement this but rethink about it before
-    ### TODO: does it make sense to allow code-refs instead of {} 
-    ###       in order to decide? varchar(10) <-> varchar(40) <-> varchar(255)
-    ###       nullable date <-> not-nullable date (+/- null checkbox)
-    ### TODO: do we have different type-names for each database?
-    ### TODO: or do this in the model class -- which is better?
-    ### TODO: think about callbacks for eg. include JavaScript, CSS, ...
-    # inside your Schema class (optionally):
+    # inside your Schema class (optionally) do:
     package DemoApp::Schema;
     ...
     # defaults for entire forms
     __PACKAGE__->form_fu_form_default({
         ... # standard form definitions like CSS, ...
     });
-    
-    # bad name -- find a different one!
-    # # defaults for a named relation -- does this make sense? -- are names really unique?
-    # __PACKAGE__->form_fu_type_default(-sizes => {
-    #     ... # meaningful defaults for relation 'sizes'
-    # });
     
     # defaults for 'integer'
     __PACKAGE__->form_fu_type_default(integer => {
@@ -52,9 +41,7 @@ DBIx::Class::FormFuBuilder
     __PACKAGE__->form_fu_type_default('character varying' => {
         ### how to handle eg. size ???
     });
-    
-    __PACKAGE__form_fu_type_default
-    ### end of TODO
+
     
     # inside your result classes do this:
     package DemoApp::Schema::Result::Product;
@@ -62,7 +49,7 @@ DBIx::Class::FormFuBuilder
     __PACKAGE__->form_fu_extra(column_name => {...});
     
     
-    # at any place you need a form
+    # at any place you need a form from a $result_set
     my $form = $result_set->generate_form_fu({...});
 
 more examples to come!
@@ -85,7 +72,7 @@ sub form_fu_form_default {
     
     my $form_default = ($info{form} ||= {});
     _merge_into_hash($form_default, @_) if (@_);
-    return $form_default;
+    return $form_default
 }
 
 =head2 form_fu_type_default
@@ -135,7 +122,7 @@ sub form_fu_extra {
     my $form_fu_extra = 
         ($self->column_info($column_name)->{extras}->{formfu} ||= {});
     _merge_into_hash($form_fu_extra, @_) if (@_);
-    return $form_fu_extra;
+    return $form_fu_extra
 }
 
 =head2 generate_form_fu
@@ -223,8 +210,80 @@ sub generate_form_fu {
 
 #
 # helper: merge things into a hash
+#         internally 'filters' and 'constraints' are handled
+#         as a hashref, later they are expanded to an array-ref
+#         this is for keeping the different types unique easily
 #
 sub _merge_into_hash {
+    my $hash = shift;
+    
+    return if (!scalar(@_) || !$_[0]);
+    
+    my %args = ref($_[0]) eq 'HASH' ? %{$_[0]} : @_;
+    
+    # handle contraint/filter different
+    foreach my $s qw(constraint filter) {
+        # $s = singular, $p = plural
+        my $p = "${s}s";
+        
+        # remove unwanted things
+        if (exists($args{"-$s"}) || exists($args{"-$p"})) {
+            # OK, we have something to remove...
+            
+            delete $hash->{$p}->{$_}
+                for ( map { ref($_) eq 'HASH' ? $_->{type} : $_ } # get type
+                      map { ref($_) eq 'ARRAY' ? @{$_} : $_ }     # un-array-ify
+                      grep { $_ }                                 # no undef's
+                      ($args{"-$s"}, $args{"-$p"}) );
+        }
+        
+        # add more things
+        if (exists($args{$s}) || exists($args{$p})) {
+            $hash->{$p}->{$_->{type}} = $_
+                for ( grep { warn $_->{type}; 1 }
+                      map { ref($_) eq 'HASH' ? $_ : {type => $_} } # get type
+                      map { ref($_) eq 'ARRAY' ? @{$_} : $_ }       # un-array-ify
+                      grep { $_ }                                   # no undef's
+                      ($args{$s}, $args{$p}) );
+        }
+    }
+    
+    # add all other remaining things in
+    while (my ($key, $value) = each(%args)) {
+        next if ($key =~ m{\A -? (?:constraint|filter) s? \z}xms);
+        
+        if (ref($value) eq 'HASH' && exists($hash->{$key}) && ref($hash->{$key}) eq 'HASH') {
+            # merge hash into hash
+            $hash->{$key}->{$_} = $value->{$_}
+                for keys(%{$value});
+        } else {
+            # set key
+            $hash->{$key} = $value;
+        }
+    }
+}
+
+#
+# helper: convert filters and constraints back to array-refs
+#
+sub _convert_hash {
+    my $hash = shift;
+    
+    return {
+        map {
+            m{\A (?:constraints|filters) \z}xms
+              ? ($_ => [ sort { $a->{type} cmp $b->{type} } # sorting to allow simple testing
+                         values %{$hash->{$_}} ])
+              : ($_ => $hash->{$_})
+        }
+        keys(%{$hash})
+    };
+}
+
+#
+# old version - trash soon
+#
+sub _merge_into_hash_OLD {
     my $hash = shift;
     
     return if (!scalar(@_) || !$_[0]);
@@ -359,8 +418,8 @@ sub _add_elements {
             label       => ucfirst($column),
             # will be added later
             # type      => 'Text',
-            constraints => [],
-            filters     => [],
+            constraints => {},
+            filters     => {},
         );
         
         _merge_into_hash(\%field, $column_info->{extras}->{formfu});
@@ -399,10 +458,10 @@ sub _add_elements {
             # simple field
             #
             if (!$column_info->{is_nullable}) {
-                push @{$field{constraints}}, {type => 'Required'};
+                $field{constraints}->{Required} = {type => 'Required'};
             }
             if ($column_info->{data_type} eq 'numeric') {
-                push @{$field{constraints}}, {type => 'Number'};
+                $field{constraints}->{Number} = {type => 'Number'};
             }
             
             _merge_into_hash(\%field, $info{type}->{$column_info->{data_type}});
@@ -419,7 +478,7 @@ sub _add_elements {
         delete $field{$_}
             for grep {m{\A-}} keys(%field);
         
-        push @{$elements}, \%field;
+        push @{$elements}, _convert_hash(\%field);
     }
 
     #
