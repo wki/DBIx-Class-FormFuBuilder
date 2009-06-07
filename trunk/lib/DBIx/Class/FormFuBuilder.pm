@@ -17,7 +17,7 @@ DBIx::Class::FormFuBuilder
 
     ### STILL UNDER HEAVY CONSTRUCTION
     ### USE AT OWN RISK!!!
-
+    
     # inside your Model class:
     package YourApp::Model::DB;
     ...
@@ -41,7 +41,7 @@ DBIx::Class::FormFuBuilder
     __PACKAGE__->form_fu_type_default('character varying' => {
         ### how to handle eg. size ???
     });
-
+    
     
     # inside your result classes do this:
     package DemoApp::Schema::Result::Product;
@@ -69,10 +69,11 @@ set general defaults for every form as a hashref
 
 sub form_fu_form_default {
     my $self = shift;
-    
-    my $form_default = ($info{form} ||= {});
-    _merge_into_hash($form_default, @_) if (@_);
-    return $form_default
+
+    if (@_) {
+        return $info{form} = _create_mergable_hash(@_);
+    }
+    return $info{form} ||= {};
 }
 
 =head2 form_fu_type_default
@@ -84,14 +85,14 @@ specify defaults for a given SQL-Datatype
 sub form_fu_type_default {
     my $self = shift;
     my $datatype = shift;
-    
+
     die "datatype must be a string"
         if (ref($datatype) || !$datatype);
-    
-    my $type_default = ($info{type}->{$datatype} ||= {});
-    ### FIXME: must keep -constraint(s) and -filter(s)
-    _merge_into_hash($type_default, @_) if (@_);
-    return $type_default;
+
+    if (@_) {
+        return $info{type}->{$datatype} = _create_mergable_hash(@_);
+    }
+    return $info{type}->{$datatype} ||= {};
 }
 
 =head2 form_fu_extras
@@ -117,14 +118,15 @@ meaningful things could be:
 sub form_fu_extra {
     my $self = shift;
     my $column_name = shift;
-    
+
     die 'no column name given' if (!$column_name);
-    
-    my $form_fu_extra = 
-        ($self->column_info($column_name)->{extras}->{formfu} ||= {});
-    ### FIXME: must keep -constraint(s) and -filter(s)
-    _merge_into_hash($form_fu_extra, @_) if (@_);
-    return $form_fu_extra
+
+    my $extras = $self->column_info($column_name)->{extras};
+
+    if (@_) {
+        return $extras->{formfu} = _create_mergable_hash(@_);
+    }
+    return $extras->{formfu} ||= {};
 }
 
 =head2 generate_form_fu
@@ -164,27 +166,28 @@ this is an additional element-array inserted at the end of the form
 sub generate_form_fu {
     my $rs = shift;
     my %args = ( ref($_[0]) eq 'HASH' ? %{$_[0]} : @_ );
-    
+
     die 'only usable on classes derived from "DBIx::Class::ResultSet"'
         unless $rs->isa('DBIx::Class::ResultSet');
-        
+
     my $result_source = $rs->result_source;
-    
+
     ### FIXME: is there a way to avoid this bad back???
     ### fire this query would be a solution but takes time :-(
+    ### poking around in DBIx::Class's internals is bad.
     my $dummy = $rs->_resolved_attrs;
-    
+
     #
     # build form scaffolding merging singular things into plural...
     #
     my $append = delete $args{append};
     $args{elements} = [] if (ref($args{elements}) ne 'ARRAY');
-    
+
     my %form = (
         attributes => {},
         %args,
     );
-    
+
     #
     # add elements
     #
@@ -203,7 +206,7 @@ sub generate_form_fu {
             label => ' ',
         };
     }
-    
+
     #
     # done :-)
     #
@@ -211,65 +214,62 @@ sub generate_form_fu {
 }
 
 #
-# helper: merge things into a hash
-#         internally 'filters' and 'constraints' are handled
-#         as a hashref, later they are expanded to an array-ref
-#         this is for keeping the different types unique easily
+# helper: convert into a mergable hash
+#         (-?)filter(s?) and (-?)constraint(s?) will become hash-entries
+#         like { Required => { type => 'Required', ... }, ... }
+# input: hashref or list
+# output: hashref
+#
+sub _create_mergable_hash {
+    my %hash = ref($_[0]) eq 'HASH' ? %{$_[0]} : @_;
+
+    # special treatment for some keys
+    foreach my $s qw(-constraint constraint -filter filter) {
+        # $s = singular, $p = plural
+        my $p = "${s}s";
+
+        my %data = (
+            map { ref($_) eq 'HASH'                    # generate type
+                    ? ( $_->{type} => $_ )             #  x => {type => x}
+                    : ( $_         => {type => $_} ) 
+                }
+            map { ref($_) eq 'ARRAY' ? @{$_} : $_ }    # expand array-refs
+            grep { $_ }                                # no undef's
+            (delete @hash{$s, $p}) 
+        );
+
+        $hash{$p} = \%data if (%data);
+    }
+
+    return \%hash;
+}
+
+#
+# merge a second hash into the first one
 #
 sub _merge_into_hash {
     my $hash = shift;
-    
-    return if (!scalar(@_) || !$_[0]);
-    
-    my %args = ref($_[0]) eq 'HASH' ? %{$_[0]} : @_;
-    
-    # handle contraint/filter different
-    foreach my $s qw(constraint filter) {
-        # $s = singular, $p = plural
-        my $p = "${s}s";
-        
-        # remove unwanted things
-        if (exists($args{"-$s"}) || exists($args{"-$p"})) {
-            # OK, we have something to remove...
-            
-            delete $hash->{$p}->{$_}
-                for ( grep { warn "Remove: $_"; 1 }
-                      map { ref($_) eq 'HASH' ? $_->{type} : $_ } # get type
-                      map { ref($_) eq 'ARRAY' ? @{$_} : $_ }     # un-array-ify
-                      grep { $_ }                                 # no undef's
-                      ($args{"-$s"}, $args{"-$p"}) );
-        }
-        
-        # add more things
-        if (exists($args{$s}) || exists($args{$p})) {
-            $hash->{$p}->{$_->{type}} = $_
-                for ( # grep { warn "Add: $_->{type}"; 1 }
-                      map { ref($_) eq 'HASH' ? $_ : {type => $_} } # get type
-                      map { ref($_) eq 'ARRAY' ? @{$_} : $_ }       # un-array-ify
-                      grep { $_ }                                   # no undef's
-                      ($args{$s}, $args{$p}) );
-        }
-        
-        delete $args{"-$s"};
-        delete $args{"-$p"};
-        delete $args{$s};
-        delete $args{$p};
-    }
-    
-    __merge($hash, \%args);
-}
-
-sub __merge {
-    my $hash = shift;
     my $args = shift;
-    
-    while (my ($key, $value) = each(%{$args})) {
-        if (ref($value) eq 'HASH' && exists($hash->{$key}) && ref($hash->{$key}) eq 'HASH') {
+
+    foreach my $key (sort keys(%{$args})) { # sort ensures '-...' comes first
+        my $value = $args->{$key};
+        if ($key =~ m{\A - (constraints|filters) \z}xms) {
+            #
+            # delete things from hash
+            #
+            my $delete_key = $1;
+            delete $hash->{$delete_key}->{$_}
+                for keys(%{$value});
+        } elsif (ref($value) eq 'HASH' && exists($hash->{$key}) && ref($hash->{$key}) eq 'HASH') {
+            #
             # merge hash into hash
+            #
             $hash->{$key}->{$_} = $value->{$_}
                 for keys(%{$value});
         } else {
+            #
             # set key
+            #
             $hash->{$key} = $value;
         }
     }
@@ -301,9 +301,9 @@ sub _add_elements {
     my $elements = shift;
     my $alias = shift;
     my @columns = @_;
-    
+
     # warn "add elements: @columns...";
-    
+
     #
     # add hidden ID for primary columns
     #
@@ -315,7 +315,7 @@ sub _add_elements {
             name => $primary_col,
         };
     }
-    
+
     #
     # determine relationships
     #
@@ -347,39 +347,46 @@ sub _add_elements {
             #
         }
     }
-    
+
     #
     # loop over fields
     #
     foreach my $column_with_alias (@columns) {
         # filter out columns we do not want...
         next if ($column_with_alias !~ m{\A $alias [.]}xms);
-        
+
+        # extract raw column name
         my $column = $column_with_alias;
         $column =~ s{\A $alias [.]}{}xms;
-        next if ($is_primary{$column});
         
+        # filter out primaries
+        next if ($is_primary{$column});
+
         # get the column's info
         my $column_info = $result_source->column_info($column);
-        
+
         # OK we got a field left to generate
+        #
+        # 'type' will be added later
+        # 'label' will be guessed (maybe overwritten later)
+        # 'constraints' and 'filters' are hashrefs
+        #     and will be re-converted later
+        #
         my %field = (
             name        => $column,
             label       => ucfirst($column),
-            # will be added later
-            # type      => 'Text',
             constraints => {},
             filters     => {},
         );
-        
-        __merge(\%field, $column_info->{extras}->{formfu});
-        
+
+        _merge_into_hash(\%field, $column_info->{extras}->{formfu});
+
         if (exists($has_one{$column})) {
             #
             # has-one relation
             #
             my $source = $has_one{$column}->{source};
-            
+
             $field{type} = 'Select';
             if ($column_info->{is_nullable}) {
                 $field{empty_first} = 1;
@@ -413,21 +420,23 @@ sub _add_elements {
             if ($column_info->{data_type} eq 'numeric') {
                 $field{constraints}->{Number} = {type => 'Number'};
             }
-            
-            __merge(\%field, $info{type}->{$column_info->{data_type}});
+
+            _merge_into_hash(\%field, 
+                             $info{type}->{$column_info->{data_type}});
         }
-        
+
         #
         # add a default type if not yet set
         #
         $field{type} ||= 'Text';
-        
+
         #
         # cleanup a '-' prefixed keys -- dirty, I know...
         #
         delete $field{$_}
-            for grep {m{\A-}} keys(%field);
-        
+            for grep {m{\A-}xms} keys(%field);
+
+        # convert 'constraints' and 'filters' back to array-refs
         push @{$elements}, _convert_hash(\%field);
     }
 
@@ -438,7 +447,7 @@ sub _add_elements {
         next if (ref($from) ne 'ARRAY');
         my ($rel_name) = grep {exists($has_many{$_})} keys(%{$from->[0]});
         next if (!$rel_name);
-    
+
         # we found a has-many relation we would join in a select
         my %repeatable = (
             type         => 'Repeatable',
@@ -450,7 +459,7 @@ sub _add_elements {
             },
             elements => [],
         );
-        
+
         my @repeat_columns;
         foreach my $column (@columns) {
             next if ($column !~ m{\A $rel_name [.]}xms);
@@ -461,9 +470,9 @@ sub _add_elements {
         }
         $rs->_add_elements($has_many{$rel_name}->{source} => $repeatable{elements},
                            $rel_name, @repeat_columns);
-        
+
         push @{$elements}, \%repeatable;
-        
+
         push @{$elements}, {
             type => 'Hidden',
             name => "${rel_name}_count",

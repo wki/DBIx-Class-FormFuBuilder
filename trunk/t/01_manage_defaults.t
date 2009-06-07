@@ -19,7 +19,7 @@ lives_ok { $class->form_fu_form_default({a => 42, b => 'ccc'}) } 'setting hashre
 # dies_ok { $class->form_fu_form_default(['array','scalar value']) } 'setting arrayref dies';
 is_deeply($class->form_fu_form_default, {a => 42, b => 'ccc'}, 'reading accessor 2 works');
 lives_ok { $class->form_fu_form_default({b => 'ddd'}) } 'setting hashref 2 works';
-is_deeply($class->form_fu_form_default, {a => 42, b => 'ddd'}, 'reading accessor 3 works');
+is_deeply($class->form_fu_form_default, {b => 'ddd'}, 'reading accessor 3 works');
 
 {
     # a fake package for accessing column_info

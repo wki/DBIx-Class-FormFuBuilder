@@ -182,8 +182,6 @@ Schema::Result::Person->form_fu_type_default(boolean => {
 lives_ok { $form = $resultset->generate_form_fu() } 
          'form construction 4 OK';
 
-use Data::Dumper; warn Data::Dumper->Dump([$form],['form']); exit;
-
 is_deeply($form,
           { elements => [{
                            name => 'id',
