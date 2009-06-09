@@ -1,0 +1,11 @@
+Things ToDo / Ideas
+
+- construct a 'Unique' constraint
+  type => HTML::FormFu::Constraint::Unique
+  model_result => 'ResultClass'
+  model_column => 'column_name'
+  
+- OR: auto-add unique-callback test for columns
+  type => Callback
+  callback => 'DemoApp::Controller::Login::email_check'
+  message => Already in use
